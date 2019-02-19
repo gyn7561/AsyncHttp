@@ -23,7 +23,7 @@ namespace AsyncHttp.Test
             get { return testContextInstance; }
             set { testContextInstance = value; }
         }
-
+        private HttpConnectionPool httpConnectionPool = new HttpConnectionPool();
 
         [TestMethod]
         public void Http()
@@ -55,7 +55,7 @@ namespace AsyncHttp.Test
             {
                 TestContext.WriteLine(request.ToHttpCommand());
                 TestContext.WriteLine("-------");
-                var conn = new AsyncHttp.Http.HttpConnection();
+                var conn = new AsyncHttp.Http.HttpConnection(httpConnectionPool);
                 await conn.SendRequest(request);
                 var res = await conn.ReadResponse();
                 var memoryStream = new MemoryStream();
@@ -88,7 +88,7 @@ namespace AsyncHttp.Test
             {
                 TestContext.WriteLine(request.ToHttpCommand());
                 TestContext.WriteLine("-------");
-                var conn = new AsyncHttp.Http.HttpConnection();
+                var conn = new AsyncHttp.Http.HttpConnection(httpConnectionPool);
                 await conn.SendRequest(request);
                 var res = await conn.ReadResponse();
                 var memoryStream = new MemoryStream();
@@ -117,17 +117,16 @@ namespace AsyncHttp.Test
             request.Headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8";
             request.Headers["Accept-Language"] = "zh-CN,zh;q=0.9";
             request.Headers["Accept-Encoding"] = "gzip, deflate";
-            request.Headers["Content-Type"] = "application/x-www-form-urlencoded";
             request.Body = new HttpRequestBody("application/x-www-form-urlencoded", "code=%3C%21DOCTYPE+HTML%3E%0D%0A%3Chtml%3E%0D%0A%3Cbody%3E%0D%0A%0D%0A%3Cform+actionw3equalsign%22%2Fexample%2Fhtml5%2Fdemo_form.asp%22+methodw3equalsign%22get%22%3E%0D%0AUsername%3A+%3Cinput+typew3equalsign%22text%22+namew3equalsign%22usr_name%22+%2F%3E%0D%0AEncryption%3A+%3Ckeygen+namew3equalsign%22security%22+%2F%3E%0D%0A%3Cinput+typew3equalsign%22submit%22+%2F%3E%0D%0A%3C%2Fform%3E%0D%0A%0D%0A%3C%2Fbody%3E%0D%0A%3C%2Fhtml%3E%0D%0A&bt=");
             async Task temp()
             {
                 TestContext.WriteLine(request.ToHttpCommand());
                 TestContext.WriteLine("-------");
-                var conn = new AsyncHttp.Http.HttpConnection();
+                var conn = new AsyncHttp.Http.HttpConnection(httpConnectionPool);
                 await conn.SendRequest(request);
                 var res = await conn.ReadResponse();
                 var memoryStream = new MemoryStream();
-                TestContext.WriteLine(res.Headers.ToHttpCommandString());
+                TestContext.WriteLine(res.ToHttpCommandString());
                 await res.BodyContentStream.CopyToAsync(memoryStream);
                 var str = Encoding.GetEncoding("utf-8").GetString(memoryStream.ToArray());
                 TestContext.WriteLine(str);

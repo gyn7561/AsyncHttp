@@ -25,9 +25,19 @@ namespace AsyncHttp.Entity
             return list.Where(kv => String.Compare(key, kv.Key, true) == 0).ToList();
         }
 
+        public void Remove(string key)
+        {
+            list = list.Where(kv => string.Compare(kv.Key, key, true) != 0).ToList();
+        }
+
         public bool ContainsKey(string key)
         {
             return this.Names().Contains(key);
+        }
+
+        public void Add(string key, string value)
+        {
+            list.Add(new KeyValuePair<string, string>(key, value));
         }
 
         public string this[string key]

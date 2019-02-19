@@ -10,9 +10,9 @@ namespace AsyncHttp.Streams
     public class HttpChunkedStream : System.IO.Stream
     {
         public System.IO.Stream NetworkStream { get; }
-        public HttpChunkedStream(System.IO.Stream networkStream)
+        internal HttpChunkedStream(System.IO.Stream networkStream, byte[] bodyData)
         {
-            NetworkStream = networkStream;
+            NetworkStream = new CombinedStream(new List<Stream>() { new MemoryStream(bodyData), networkStream }.GetEnumerator());
         }
 
         public override bool CanRead => true;

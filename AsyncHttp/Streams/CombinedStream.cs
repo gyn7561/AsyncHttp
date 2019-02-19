@@ -5,14 +5,13 @@ using System.Text;
 
 namespace AsyncHttp.Streams
 {
-    public class HttpContentStream : System.IO.Stream
+    internal class CombinedStream : Stream
     {
-        public Stream NetworkStream { get; }
-        public int ContentLength { get; }
-        public HttpContentStream(System.IO.Stream networkStream, int contentLength)
+        private readonly IEnumerator<Stream> list;
+
+        internal CombinedStream(IEnumerator<Stream> list)
         {
-            NetworkStream = networkStream;
-            ContentLength = contentLength;
+            this.list = list;
         }
 
         public override bool CanRead => true;
@@ -21,25 +20,41 @@ namespace AsyncHttp.Streams
 
         public override bool CanWrite => false;
 
-        public override long Length => ContentLength;
+        public override long Length => throw new NotSupportedException();
 
         public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
-
 
         public override void Flush()
         {
         }
 
-        int totalReadCount = 0;
         public override int Read(byte[] buffer, int offset, int count)
         {
-            if (totalReadCount >= ContentLength)
+            if (list.Current == null)
             {
-                return 0;
+                var hasNext = list.MoveNext();
+                if (!hasNext)
+                {
+                    return -1;
+                }
             }
-            var readCount = NetworkStream.Read(buffer, offset, count);
-            totalReadCount += readCount;
-            return readCount;
+            var len = list.Current.Read(buffer, offset, count);
+            if (len <= 0)
+            {
+                var hasNext = list.MoveNext();
+                if (!hasNext)
+                {
+                    return -1;
+                }
+                else
+                {
+                    return Read(buffer, offset, count);
+                }
+            }
+            else
+            {
+                return len;
+            }
         }
 
         public override long Seek(long offset, SeekOrigin origin)

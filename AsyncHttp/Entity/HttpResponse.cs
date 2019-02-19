@@ -29,5 +29,13 @@ namespace AsyncHttp.Entity
             return memoryStream.ToArray();
         }
 
+        public string ToHttpCommandString()
+        {
+            var stringBuilder = new StringBuilder();
+            stringBuilder.Append($"{HttpVersion} {HttpCode} {HttpStatus}\r\n");
+            stringBuilder.Append(Headers.ToHttpCommandString());
+            return stringBuilder.ToString();
+        }
+
     }
 }

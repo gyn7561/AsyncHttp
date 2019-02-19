@@ -9,19 +9,23 @@ using System.Threading.Tasks;
 
 namespace AsyncHttp.Http
 {
-    internal class HttpTcpConnection
+    internal class HttpTcpConnection : IDisposable
     {
         private TcpClient tcpClient = new TcpClient();
 
         public Stream NetworkStream { get; internal set; }
 
+        public Boolean Using { get; set; }
 
         public HttpTcpConnection()
         {
         }
 
+        public Boolean Connected { get { return tcpClient.Connected; } }
+
         public async Task ConnectAsync(string host, int port)
         {
+
             await tcpClient.ConnectAsync(host, port);
             NetworkStream = tcpClient.GetStream();
         }
@@ -31,6 +35,10 @@ namespace AsyncHttp.Http
             await stream.CopyToAsync(NetworkStream);
         }
 
-
+        public void Dispose()
+        {
+            NetworkStream.Dispose();
+            tcpClient.Dispose();
+        }
     }
 }

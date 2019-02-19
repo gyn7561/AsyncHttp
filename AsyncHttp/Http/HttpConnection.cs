@@ -9,17 +9,18 @@ using AsyncHttp.Enums;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using AsyncHttp.Entity;
+using AsyncHttp.Extension;
 
 namespace AsyncHttp.Http
 {
 
-    public class HttpConnection
+    public class HttpConnection : IDisposable
     {
+        private readonly HttpConnectionPool httpConnectionPool;
         private HttpTcpConnection httpTcpConnection;
-
-        public HttpConnection()
+        public HttpConnection(HttpConnectionPool httpConnectionPool)
         {
-            httpTcpConnection = new HttpTcpConnection();
+            this.httpConnectionPool = httpConnectionPool;
         }
 
         private bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
@@ -27,21 +28,26 @@ namespace AsyncHttp.Http
             if (sslPolicyErrors == SslPolicyErrors.None)
                 return true;
 
-            Console.WriteLine("Certificate error: {0}", sslPolicyErrors);
-
             // Do not allow this client to communicate with unauthenticated servers.
             return false;
         }
 
         public async Task SendRequest(HttpRequest httpRequest)
         {
-            await httpTcpConnection.ConnectAsync(httpRequest.Uri.Host, httpRequest.Uri.Port);
-            if (httpRequest.Uri.Scheme == "https")
+            var isSsl = httpRequest.Uri.Scheme == "https";
+            this.httpTcpConnection = httpConnectionPool.GetConnection(httpRequest.Uri.Host, httpRequest.Uri.Port, isSsl);
+            if (!httpTcpConnection.Connected)
             {
-                SslStream sslStream = new SslStream(httpTcpConnection.NetworkStream, false, new RemoteCertificateValidationCallback(ValidateServerCertificate), null);
-                httpTcpConnection.NetworkStream = sslStream;
-                await sslStream.AuthenticateAsClientAsync(httpRequest.Uri.Host);
+                await httpTcpConnection.ConnectAsync(httpRequest.Uri.Host, httpRequest.Uri.Port);
+                if (isSsl)
+                {
+                    SslStream sslStream = new SslStream(httpTcpConnection.NetworkStream, false, new RemoteCertificateValidationCallback(ValidateServerCertificate), null);
+                    httpTcpConnection.NetworkStream = sslStream;
+                    await sslStream.AuthenticateAsClientAsync(httpRequest.Uri.Host);
+                }
             }
+
+
             if (httpRequest.Body != null && !httpRequest.Headers.ContainsKey("Content-Type"))
             {
                 httpRequest.Headers["Content-Type"] = httpRequest.Body.ContentType;
@@ -62,24 +68,30 @@ namespace AsyncHttp.Http
 
         private readonly byte[] HEADER_BODY_SPLIT = new byte[] { 13, 10, 13, 10 };// \r\n\r\n
 
-
         public async Task<HttpResponse> ReadResponse()
         {
-            var data = new List<byte>();
-            var oneByteBuffer = new byte[1];
+            var bufferSize = 100;
+            var buffer = new byte[bufferSize];
+            var data = new byte[0];
             var findSplitHeader = false;
+            var splitIndex = -1;
             while (!findSplitHeader)
             {
-                var length = await httpTcpConnection.NetworkStream.ReadAsync(oneByteBuffer, 0, oneByteBuffer.Length);
-                if (length == 1)
+                var length = await httpTcpConnection.NetworkStream.ReadAsync(buffer, 0, buffer.Length);
+                if (length > 0)
                 {
-                    data.Add(oneByteBuffer[0]);
-                    if (data.Count >= 4)
+                    var newData = new byte[data.Length + length];
+                    Array.Copy(data, newData, data.Length);
+                    Array.Copy(buffer, 0, newData, data.Length, length);
+                    data = newData;
+                    splitIndex = data.IndexOf(HEADER_BODY_SPLIT, startIndex: 0);
+                    if (splitIndex == -1)
                     {
-                        findSplitHeader = HEADER_BODY_SPLIT[0] == data[data.Count - 4] &&
-                            HEADER_BODY_SPLIT[1] == data[data.Count - 3] &&
-                            HEADER_BODY_SPLIT[2] == data[data.Count - 2] &&
-                            HEADER_BODY_SPLIT[3] == data[data.Count - 1];
+                        continue;
+                    }
+                    else
+                    {
+                        findSplitHeader = true;
                     }
                 }
                 else
@@ -89,7 +101,8 @@ namespace AsyncHttp.Http
             }
 
             var httpResponse = new HttpResponse();
-            var headerData = data.Take(data.Count - HEADER_BODY_SPLIT.Length).ToArray();
+            var headerData = data.Take(splitIndex).ToArray();
+            var bodyData = data.Skip(splitIndex + HEADER_BODY_SPLIT.Length).ToArray();
             var headers = Encoding.UTF8.GetString(headerData);
             var lines = headers.Split("\r\n");
             var httpStatusString = lines.First().Split(' ', 3);
@@ -109,18 +122,26 @@ namespace AsyncHttp.Http
                     var encodings = split[1].Split(',');
                     httpResponse.TransferEncoding = encodings.Select(enc => Enum.Parse<TransferEncoding>(enc, true)).ToList();
                 }
-                httpResponse.Headers[split[0]] = split[1];
+                httpResponse.Headers.Add(split[0], split[1]);
+                if (split.Length < 2)
+                {
+
+                }
             }
             if (httpResponse.TransferEncoding.Contains(TransferEncoding.Chunked))
             {
-                httpResponse.BodyContentStream = new HttpChunkedStream(httpTcpConnection.NetworkStream);
+                httpResponse.BodyContentStream = new ContentStreamWrap(new HttpChunkedStream(httpTcpConnection.NetworkStream, bodyData), httpTcpConnection);
             }
             else
             {
-                httpResponse.BodyContentStream = new HttpContentStream(httpTcpConnection.NetworkStream, httpResponse.ContentLength);
+                httpResponse.BodyContentStream = new ContentStreamWrap(new HttpContentStream(httpTcpConnection.NetworkStream, httpResponse.ContentLength, bodyData), httpTcpConnection);
             }
 
             return httpResponse;
+        }
+
+        public void Dispose()
+        {
         }
     }
 
