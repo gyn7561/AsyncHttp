@@ -50,10 +50,8 @@ namespace AsyncHttp.Test
                     {
                         Uri = new Uri(url)
                     };
-                    var res = await asyncHttpClient.Execute(request);
-                    var memoryStream = new MemoryStream();
-                    await res.BodyContentStream.CopyToAsync(memoryStream);
-                    var data = memoryStream.ToArray();
+                    var res = await asyncHttpClient.ExecuteAsync(request);
+                    var data = await res.BodyStream.ReadAsByteArrayAsync();
                 }
                 end = DateTime.Now;
                 TestContext.WriteLine($"AsyncHttpClient request {count} times , cost {(end - start).TotalMilliseconds}ms");
@@ -67,7 +65,7 @@ namespace AsyncHttp.Test
         {
             var thread = 10;
             var count = 1000;
-            var url = "http://www.w3school.com.cn/";
+            var url = "https://www.baidu.com/";
             HttpClient httpClient = new HttpClient();
             var start = DateTime.Now;
             var allTask = new List<Task>();
@@ -117,16 +115,12 @@ namespace AsyncHttp.Test
                                 return;
                             }
                         }
-
                         var request = new HttpRequest()
                         {
                             Uri = new Uri(url)
                         };
-                        var res = await asyncHttpClient.Execute(request);
-                        var memoryStream = new MemoryStream();
-                        await res.BodyContentStream.CopyToAsync(memoryStream);
-                        var data = memoryStream.ToArray();
-
+                        var res = await asyncHttpClient.ExecuteAsync(request);
+                        var data = await res.BodyStream.ReadAsByteArrayAsync();
                     }
                 }));
             }

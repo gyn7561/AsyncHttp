@@ -30,7 +30,7 @@ namespace AsyncHttp.Http
             NetworkStream = tcpClient.GetStream();
         }
 
-        public async Task SendData(System.IO.Stream stream)
+        public async Task SendDataAsync(System.IO.Stream stream)
         {
             await stream.CopyToAsync(NetworkStream);
         }

@@ -14,7 +14,7 @@ using AsyncHttp.Extension;
 namespace AsyncHttp.Http
 {
 
-    public class HttpConnection : IDisposable
+    public class HttpConnection
     {
         private readonly HttpConnectionPool httpConnectionPool;
         private HttpTcpConnection httpTcpConnection;
@@ -32,7 +32,7 @@ namespace AsyncHttp.Http
             return false;
         }
 
-        public async Task SendRequest(HttpRequest httpRequest)
+        public async Task SendRequestAsync(HttpRequest httpRequest)
         {
             var isSsl = httpRequest.Uri.Scheme == "https";
             this.httpTcpConnection = httpConnectionPool.GetConnection(httpRequest.Uri.Host, httpRequest.Uri.Port, isSsl);
@@ -59,7 +59,7 @@ namespace AsyncHttp.Http
             var cmd = httpRequest.ToHttpCommand();
             var data = Encoding.UTF8.GetBytes(cmd);
             var reqStream = new MemoryStream(data);
-            await httpTcpConnection.SendData(reqStream);
+            await httpTcpConnection.SendDataAsync(reqStream);
             if (httpRequest.Body != null)
             {
                 httpRequest.Body?.WriteBody(httpTcpConnection.NetworkStream);
@@ -68,7 +68,7 @@ namespace AsyncHttp.Http
 
         private readonly byte[] HEADER_BODY_SPLIT = new byte[] { 13, 10, 13, 10 };// \r\n\r\n
 
-        public async Task<HttpResponse> ReadResponse()
+        public async Task<HttpResponse> ReadResponseAsync()
         {
             var bufferSize = 100;
             var buffer = new byte[bufferSize];
@@ -123,26 +123,19 @@ namespace AsyncHttp.Http
                     httpResponse.TransferEncoding = encodings.Select(enc => Enum.Parse<TransferEncoding>(enc, true)).ToList();
                 }
                 httpResponse.Headers.Add(split[0], split[1]);
-                if (split.Length < 2)
-                {
-
-                }
             }
             if (httpResponse.TransferEncoding.Contains(TransferEncoding.Chunked))
             {
-                httpResponse.BodyContentStream = new ContentStreamWrap(new HttpChunkedStream(httpTcpConnection.NetworkStream, bodyData), httpTcpConnection);
+                httpResponse.BodyStream = new ContentStreamWrap(new HttpChunkedStream(httpTcpConnection.NetworkStream, bodyData), httpTcpConnection);
             }
             else
             {
-                httpResponse.BodyContentStream = new ContentStreamWrap(new HttpContentStream(httpTcpConnection.NetworkStream, httpResponse.ContentLength, bodyData), httpTcpConnection);
+                httpResponse.BodyStream = new ContentStreamWrap(new HttpContentStream(httpTcpConnection.NetworkStream, httpResponse.ContentLength, bodyData), httpTcpConnection);
             }
 
             return httpResponse;
         }
 
-        public void Dispose()
-        {
-        }
     }
 
 }

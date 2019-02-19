@@ -4,6 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace AsyncHttp.Test
@@ -56,11 +57,11 @@ namespace AsyncHttp.Test
                 TestContext.WriteLine(request.ToHttpCommand());
                 TestContext.WriteLine("-------");
                 var conn = new AsyncHttp.Http.HttpConnection(httpConnectionPool);
-                await conn.SendRequest(request);
-                var res = await conn.ReadResponse();
+                await conn.SendRequestAsync(request);
+                var res = await conn.ReadResponseAsync();
                 var memoryStream = new MemoryStream();
                 TestContext.WriteLine(res.Headers.ToHttpCommandString());
-                await res.BodyContentStream.CopyToAsync(memoryStream);
+                await res.BodyStream.CopyToAsync(memoryStream);
                 var str = Encoding.GetEncoding("utf-8").GetString(memoryStream.ToArray());
                 TestContext.WriteLine(str);
             }
@@ -89,11 +90,11 @@ namespace AsyncHttp.Test
                 TestContext.WriteLine(request.ToHttpCommand());
                 TestContext.WriteLine("-------");
                 var conn = new AsyncHttp.Http.HttpConnection(httpConnectionPool);
-                await conn.SendRequest(request);
-                var res = await conn.ReadResponse();
+                await conn.SendRequestAsync(request);
+                var res = await conn.ReadResponseAsync();
                 var memoryStream = new MemoryStream();
                 TestContext.WriteLine(res.Headers.ToHttpCommandString());
-                await res.BodyContentStream.CopyToAsync(memoryStream);
+                await res.BodyStream.CopyToAsync(memoryStream);
                 var str = Encoding.GetEncoding("utf-8").GetString(memoryStream.ToArray());
                 TestContext.WriteLine(str);
                 //File.WriteAllBytes("test.gz", memoryStream.ToArray());
@@ -123,18 +124,52 @@ namespace AsyncHttp.Test
                 TestContext.WriteLine(request.ToHttpCommand());
                 TestContext.WriteLine("-------");
                 var conn = new AsyncHttp.Http.HttpConnection(httpConnectionPool);
-                await conn.SendRequest(request);
-                var res = await conn.ReadResponse();
+                await conn.SendRequestAsync(request);
+                var res = await conn.ReadResponseAsync();
                 var memoryStream = new MemoryStream();
                 TestContext.WriteLine(res.ToHttpCommandString());
-                await res.BodyContentStream.CopyToAsync(memoryStream);
+                await res.BodyStream.CopyToAsync(memoryStream);
                 var str = Encoding.GetEncoding("utf-8").GetString(memoryStream.ToArray());
                 TestContext.WriteLine(str);
                 //File.WriteAllBytes("test.gz", memoryStream.ToArray());
             }
             var s = temp();
             s.Wait();
+        }
 
+
+        [TestMethod]
+        public void Callback()
+        {
+            AsyncHttpClient asyncHttpClient = new AsyncHttpClient();
+            var request = new HttpRequest();
+            request.Uri = new Uri("http://www.w3school.com.cn");
+            var html = asyncHttpClient.GetString(request);
+            TestContext.WriteLine(html);
+            var count = 0;
+            var testCount = 100;
+
+            for (int i = 0; i < testCount; i++)
+            {
+                asyncHttpClient.Execute(request, (res) =>
+                {
+                    res.BodyStream.ReadAsString((str) =>
+                    {
+                        TestContext.WriteLine("thread id:" + Thread.CurrentThread.ManagedThreadId);
+
+                        lock (this)
+                        {
+                            count++;
+                        }
+                    });
+
+                });
+            }
+
+            while (count != testCount)
+            {
+                Thread.Sleep(10);
+            }
         }
     }
 }
